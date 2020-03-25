@@ -48,8 +48,17 @@ type Creator struct {
 	c            *controller.Controller
 }
 
-// New creates new jsonapi Creator.
+// NewC creates new jsonapi Handler Creator for given 'c' controller.
 func NewC(c *controller.Controller) *Creator {
+	return newCreator(c)
+}
+
+// New creates new jsonapi Handler Creator for the Default Controller.
+func New() *Creator {
+	return newCreator(controller.DefaultController)
+}
+
+func newCreator(c *controller.Controller) *Creator {
 	return &Creator{
 		QueryErrorsLimit: 10,
 		c:                c,

@@ -14,6 +14,7 @@ import (
 	"github.com/neuronlabs/jsonapi-handler/log"
 )
 
+// PatchWith returns JSONAPI patch EndpointHandler for the 'model'.
 func (h *Creator) PatchWith(model interface{}) *EndpointHandler {
 	return &EndpointHandler{
 		handler: h.handlePatch,
@@ -21,6 +22,7 @@ func (h *Creator) PatchWith(model interface{}) *EndpointHandler {
 	}
 }
 
+// Patch returns JSONAPI http.HandlerFunc for the 'model'.
 func (h *Creator) Patch(model interface{}) http.HandlerFunc {
 	return h.handlePatch(h.c.MustGetModelStruct(model), "")
 }

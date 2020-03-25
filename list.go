@@ -14,32 +14,45 @@ import (
 	"github.com/neuronlabs/neuron-core/mapping"
 	"github.com/neuronlabs/neuron-core/query"
 
-	gerrors "github.com/neuronlabs/jsonapi-handler/errors"
-	gclass "github.com/neuronlabs/jsonapi-handler/errors/class"
+	handlerErrors "github.com/neuronlabs/jsonapi-handler/errors"
+	handlerClass "github.com/neuronlabs/jsonapi-handler/errors/class"
 	"github.com/neuronlabs/jsonapi-handler/log"
 )
 
+// ListHandlerCreator is the creator for the JSONAPI list endpoint http.Handler.
 type ListHandlerCreator struct {
 	h          *Creator
 	model      *mapping.ModelStruct
+	basePath   string
 	pageSize   int
 	sortFields []string
 }
 
-func (l *ListHandlerCreator) Handler() http.HandlerFunc {
-	return l.h.handleList(l.model, l.pageSize, l.sortFields...)
+// BasePath sets the basePath for given endpoint.
+func (l *ListHandlerCreator) BasePath(basePath string) *ListHandlerCreator {
+	l.basePath = basePath
+	return l
 }
 
+// Handler returns http.HandlerFunc for given handler creator.
+func (l *ListHandlerCreator) Handler() http.HandlerFunc {
+	return l.h.handleList(l.model, l.pageSize, l.basePath, l.sortFields...)
+}
+
+// PageSize sets the default 'pageSize' for given endpoint.
 func (l *ListHandlerCreator) PageSize(pageSize int) *ListHandlerCreator {
 	l.pageSize = pageSize
 	return l
 }
 
+// SortOrder sets the default sorting order for given endpoint. The input values should be in format:
+// field1, -field2 		- order by ascending field1 and then by descending field2.
 func (l *ListHandlerCreator) SortOrder(defaultSortOrder ...string) *ListHandlerCreator {
 	l.sortFields = defaultSortOrder
 	return l
 }
 
+// ListWith returns JSONAPI list endpoint http.Handler Creator for given 'model'.
 func (h *Creator) ListWith(model interface{}) *ListHandlerCreator {
 	return &ListHandlerCreator{
 		h:     h,
@@ -47,11 +60,12 @@ func (h *Creator) ListWith(model interface{}) *ListHandlerCreator {
 	}
 }
 
+// List returns JSONAPI list http.HandlerFunc for given 'model'.
 func (h *Creator) List(model interface{}) http.HandlerFunc {
-	return h.handleList(h.c.MustGetModelStruct(model), 0)
+	return h.handleList(h.c.MustGetModelStruct(model), 0, "")
 }
 
-func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, defaultSortOrder ...string) http.HandlerFunc {
+func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, basePath string, defaultSortOrder ...string) http.HandlerFunc {
 	var defaultPagination *query.Pagination
 	if defaultPageSize <= 0 && h.DefaultPageSize > 0 {
 		defaultPageSize = h.DefaultPageSize
@@ -62,11 +76,7 @@ func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, de
 			Offset: 1,
 			Type:   query.PageNumberPagination,
 		}
-		// defaultPagination, err = configPagination.Query()
-		// if err != nil {
-		// 	return nil, err
-		// }
-		// log.Debug2f("Default pagination at 'GET /%s' is: %v", model.Collection(), defaultPagination.String())
+		log.Debug2f("Default pagination at 'GET /%s' is: %v", model.Collection(), defaultPagination.String())
 	}
 	var defaultSortOrderFields []*query.SortField
 	// get default sorting from the endpoint config.
@@ -82,7 +92,7 @@ func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, de
 		ctx := req.Context()
 		s, err := h.createListScope(ctx, model, req)
 		if err != nil {
-			h.marshalErrors(rw, req, 0, gerrors.MapError(err)...)
+			h.marshalErrors(rw, req, 0, handlerErrors.MapError(err)...)
 			return
 		}
 
@@ -97,7 +107,7 @@ func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, de
 				for _, sortField := range defaultSortOrderFields {
 					if err := s.SortField(sortField); err != nil {
 						log.Errorf("[LIST][SCOPE][%s] Appending default sort field failed: %v", s.ID(), err)
-						h.marshalErrors(rw, req, 0, gerrors.ErrInternalError())
+						h.marshalErrors(rw, req, 0, handlerErrors.ErrInternalError())
 						return
 					}
 				}
@@ -111,7 +121,7 @@ func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, de
 		// execute hook before list
 		if beforeListHook, ok := Hooks.getHook(model, BeforeList); ok {
 			if err = beforeListHook(ctx, s); err != nil {
-				h.marshalErrors(rw, req, 0, gerrors.MapError(err)...)
+				h.marshalErrors(rw, req, 0, handlerErrors.MapError(err)...)
 				return
 			}
 		}
@@ -124,21 +134,25 @@ func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, de
 				}
 			}
 			if !isNoResult {
-				h.marshalErrors(rw, req, 0, gerrors.MapError(err)...)
+				h.marshalErrors(rw, req, 0, handlerErrors.MapError(err)...)
 				return
 			}
 		}
 		// execute the after list hook if given model implements it.
 		if afterListHook, ok := Hooks.getHook(model, AfterList); ok {
 			if err = afterListHook(ctx, s); err != nil {
-				h.marshalErrors(rw, req, 0, gerrors.MapError(err)...)
+				h.marshalErrors(rw, req, 0, handlerErrors.MapError(err)...)
 				return
 			}
 		}
 
+		linkType := jsonapi.ResourceLink
+		if !h.MarshalLinks {
+			linkType = jsonapi.NoLink
+		}
 		options := &jsonapi.MarshalOptions{Link: jsonapi.LinkOptions{
-			Type:       jsonapi.ResourceLink,
-			BaseURL:    h.basePath(),
+			Type:       linkType,
+			BaseURL:    h.getBasePath(basePath),
 			Collection: model.Collection(),
 		}}
 
@@ -161,7 +175,7 @@ func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, de
 		countScope := s.Copy()
 		total, err := countScope.CountContext(ctx)
 		if err != nil {
-			h.marshalErrors(rw, req, 0, gerrors.MapError(err)...)
+			h.marshalErrors(rw, req, 0, handlerErrors.MapError(err)...)
 			return
 		}
 
@@ -178,7 +192,7 @@ func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, de
 
 		next, err := s.Pagination.Next(total)
 		if err != nil {
-			h.marshalErrors(rw, req, 0, gerrors.MapError(err)...)
+			h.marshalErrors(rw, req, 0, handlerErrors.MapError(err)...)
 			return
 		}
 		temp = h.queryWithoutPagination(req)
@@ -191,7 +205,7 @@ func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, de
 
 		prev, err := s.Pagination.Previous()
 		if err != nil {
-			h.marshalErrors(rw, req, 0, gerrors.MapError(err)...)
+			h.marshalErrors(rw, req, 0, handlerErrors.MapError(err)...)
 			return
 		}
 		if prev != s.Pagination {
@@ -202,7 +216,7 @@ func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, de
 
 		last, err := s.Pagination.Last(total)
 		if err != nil {
-			h.marshalErrors(rw, req, 0, gerrors.MapError(err)...)
+			h.marshalErrors(rw, req, 0, handlerErrors.MapError(err)...)
 			return
 		}
 		last.FormatQuery(temp)
@@ -212,7 +226,7 @@ func (h *Creator) handleList(model *mapping.ModelStruct, defaultPageSize int, de
 		temp = h.queryWithoutPagination(req)
 		first, err := s.Pagination.First()
 		if err != nil {
-			h.marshalErrors(rw, req, 0, gerrors.MapError(err)...)
+			h.marshalErrors(rw, req, 0, handlerErrors.MapError(err)...)
 			return
 		}
 		first.FormatQuery(temp)
@@ -271,7 +285,7 @@ func (h *Creator) createListScope(ctx context.Context, model *mapping.ModelStruc
 		}
 
 		if len(values) > 1 {
-			err := errors.NewDetf(gclass.QueryInvalidParameter, "provided invalid query parameters")
+			err := errors.NewDetf(handlerClass.QueryInvalidParameter, "provided invalid query parameters")
 			err.SetDetailsf("The query parameter: '%s' used more than once.", key)
 			multiErrors = append(multiErrors, err)
 			continue
@@ -282,7 +296,7 @@ func (h *Creator) createListScope(ctx context.Context, model *mapping.ModelStruc
 		case <-ctx.Done():
 			ctxErr := ctx.Err()
 			if ctxErr == context.DeadlineExceeded {
-				err := errors.NewDet(gclass.QueryTimeout, ctxErr.Error())
+				err := errors.NewDet(handlerClass.QueryTimeout, context.DeadlineExceeded.Error())
 				err.SetDetails("The query connection had timed out")
 				return nil, err
 			}
@@ -371,7 +385,7 @@ func (h *Creator) queryParameterFields(s *query.Scope, key, value string) error 
 	}
 
 	if len(split) != 1 {
-		err := errors.NewDetf(gclass.QueryInvalidParameter, "invalid fields parameter")
+		err := errors.NewDetf(handlerClass.QueryInvalidParameter, "invalid fields parameter")
 		err.SetDetailsf("The fields parameter has invalid form. %s", key)
 		return err
 	}
@@ -381,7 +395,7 @@ func (h *Creator) queryParameterFields(s *query.Scope, key, value string) error 
 		if log.Level() == log.LDEBUG3 {
 			log.Debug3f("[QUERY][%s] invalid fieldset model: '%s': %v", s.ID(), split[0], err.Error())
 		}
-		err := errors.NewDetf(gclass.QueryInvalidParameter, "invalid query parameter")
+		err := errors.NewDetf(handlerClass.QueryInvalidParameter, "invalid query parameter")
 		err.SetDetailsf("Fields query parameter contains invalid collection name: '%s'", split[0])
 		return err
 	}
@@ -448,7 +462,7 @@ func (h *Creator) queryParameterPageTotal(s *query.Scope, key, value string) err
 	if value != "" {
 		countTotal, err = strconv.ParseBool(value)
 		if err != nil {
-			err := errors.NewDetf(gclass.QueryInvalidParameter, "invalid query parameter: '%s' value: '%s'", key, value)
+			err := errors.NewDetf(handlerClass.QueryInvalidParameter, "invalid query parameter: '%s' value: '%s'", key, value)
 			err.SetDetailsf("Query parameter: '%s' allows empty or boolean values only.", key)
 			return err
 		}
@@ -472,7 +486,7 @@ func (h *Creator) queryParameterLinks(s *query.Scope, key, value string) error {
 	if value != "" {
 		useLinks, err = strconv.ParseBool(value)
 		if err != nil {
-			err := errors.NewDetf(gclass.QueryInvalidParameter, "invalid query links parameter: '%s'", err.Error())
+			err := errors.NewDetf(handlerClass.QueryInvalidParameter, "invalid query links parameter: '%s'", err.Error())
 			err.SetDetailsf("Query parameter: '%s' contains non boolean value: '%s'.", key, value)
 			return err
 		}
@@ -485,7 +499,7 @@ func (h *Creator) defaultQueryParameter(key string) error {
 	if !h.StrictQueriesMode {
 		return nil
 	}
-	err := errors.NewDetf(gclass.QueryInvalidParameter, "unsupported query parameter: '%s'", key)
+	err := errors.NewDetf(handlerClass.QueryInvalidParameter, "unsupported query parameter: '%s'", key)
 	err.SetDetailsf("Query parameter: '%s' is not supported by the server.", key)
 	return err
 }

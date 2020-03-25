@@ -362,8 +362,9 @@ func TestHandlePatchRelationship(t *testing.T) {
 				strings.Contains(buf.String(), `"data":null`)
 			})
 
-			t.Run("Set", func(t *testing.T) {
+			t.Run("SetWithLinks", func(t *testing.T) {
 				h := NewC(c)
+				h.MarshalLinks = true
 
 				req, err := http.NewRequest("PATCH", "/humen/1/relationships/houses", strings.NewReader(`{"data":[{"type":"houses", "id": "3"}]}`))
 				require.NoError(t, err)
@@ -476,6 +477,121 @@ func TestHandlePatchRelationship(t *testing.T) {
 				assert.Equal(t, http.StatusOK, resp.Code)
 
 				assert.Contains(t, buf.String(), `{"links":{"self":"/humen/1/relationships/houses","related":"/humen/1/houses"},"data":[{"type":"houses","id":"3"}]}`)
+			})
+			t.Run("SetWithoutLinks", func(t *testing.T) {
+				h := NewC(c)
+
+				req, err := http.NewRequest("PATCH", "/humen/1/relationships/houses", strings.NewReader(`{"data":[{"type":"houses", "id": "3"}]}`))
+				require.NoError(t, err)
+
+				req.Header.Add("Content-Type", jsonapi.MediaType)
+				req.Header.Add("Accept", jsonapi.MediaType)
+				req.Header.Add("Accept-Encoding", "identity")
+				req = req.WithContext(context.WithValue(context.Background(), IDKey, "1"))
+
+				repo, err := c.GetRepository(Human{})
+				require.NoError(t, err)
+
+				humenRepo, ok := repo.(*mocks.Repository)
+				require.True(t, ok)
+
+				humenRepo.On("Begin", mock.Anything, mock.Anything).Once().Return(nil)
+				humenRepo.On("Commit", mock.Anything, mock.Anything).Return(nil)
+				humenRepo.On("List", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+					s, ok := args[1].(*query.Scope)
+					require.True(t, ok)
+
+					pfs := s.PrimaryFilters
+					if assert.Len(t, pfs, 1) {
+						pfV := pfs[0].Values
+						if assert.Len(t, pfV, 1) {
+							vs := pfV[0]
+							assert.Equal(t, query.OpIn, vs.Operator)
+							if assert.Len(t, vs.Values, 1) {
+								assert.Equal(t, 1, vs.Values[0])
+							}
+						}
+					}
+
+					humen, ok := s.Value.(*[]*Human)
+					require.True(t, ok)
+
+					*humen = append(*humen, &Human{ID: 1})
+				}).Return(nil)
+
+				repo, err = c.GetRepository(House{})
+				require.NoError(t, err)
+
+				housesRepo, ok := repo.(*mocks.Repository)
+				require.True(t, ok)
+
+				housesRepo.On("Begin", mock.Anything, mock.Anything).Once().Return(nil)
+				housesRepo.On("Commit", mock.Anything, mock.Anything).Once().Return(nil)
+				housesRepo.On("List", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+					s, ok := args[1].(*query.Scope)
+					require.True(t, ok)
+
+					ffs := s.ForeignFilters
+					if assert.Len(t, ffs, 1) {
+						ffV := ffs[0].Values
+						assert.Equal(t, "owner_id", ffs[0].StructField.NeuronName())
+						if assert.Len(t, ffV, 1) {
+							vs := ffV[0]
+							assert.Equal(t, query.OpEqual, vs.Operator)
+							if assert.Len(t, vs.Values, 1) {
+								assert.Equal(t, 1, vs.Values[0])
+							}
+						}
+					}
+
+					houses, ok := s.Value.(*[]*House)
+					require.True(t, ok)
+
+					*houses = append(*houses, &House{ID: 3, OwnerID: 1})
+				}).Return(nil)
+
+				housesRepo.On("Patch", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+					s, ok := args[1].(*query.Scope)
+					require.True(t, ok)
+
+					house, ok := s.Value.(*House)
+					require.True(t, ok)
+
+					house.ID = 3
+					house.OwnerID = 1
+				}).Return(nil)
+
+				// response with value
+				humenRepo.On("Get", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+					s, ok := args[1].(*query.Scope)
+					require.True(t, ok)
+
+					human, ok := s.Value.(*Human)
+					require.True(t, ok)
+
+					human.ID = 1
+				}).Return(nil)
+
+				housesRepo.On("List", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+					s, ok := args[1].(*query.Scope)
+					require.True(t, ok)
+
+					houses, ok := s.Value.(*[]*House)
+					require.True(t, ok)
+
+					*houses = append(*houses, &House{ID: 3})
+				}).Return(nil)
+
+				resp := httptest.NewRecorder()
+				h.PatchRelationship(Human{}, "houses").ServeHTTP(resp, req)
+
+				buf := &bytes.Buffer{}
+				_, err = buf.ReadFrom(resp.Body)
+				require.NoError(t, err)
+
+				assert.Equal(t, http.StatusOK, resp.Code)
+
+				assert.Contains(t, buf.String(), `{"data":[{"type":"houses","id":"3"}]}`)
 			})
 		})
 	})

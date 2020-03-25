@@ -13,6 +13,7 @@ import (
 // HookType defines the type of the JSONAPI endpoint.
 type HookType int
 
+// hook types enum definitions.
 const (
 	AfterCreate HookType = iota
 	BeforeCreate
@@ -54,7 +55,7 @@ func registerHookC(c *controller.Controller, model interface{}, endpoint HookTyp
 // HookFunction is the function type used as the hooks for the JSONAPI handlers.
 type HookFunction func(ctx context.Context, s *query.Scope) error
 
-// HookStore is the store for the hooks for given models. For each model a slice of hook functions
+// HooksStore is the store for the hooks for given models. For each model a slice of hook functions
 // that stores the hooks indexed by the enum value of related HookType.
 type HooksStore map[*mapping.ModelStruct][]HookFunction
 

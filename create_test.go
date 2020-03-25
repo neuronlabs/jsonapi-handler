@@ -21,17 +21,17 @@ import (
 	"github.com/neuronlabs/errors"
 	"github.com/neuronlabs/jsonapi"
 	"github.com/neuronlabs/neuron-core/class"
-	cconfig "github.com/neuronlabs/neuron-core/config"
+	"github.com/neuronlabs/neuron-core/config"
 	"github.com/neuronlabs/neuron-core/query"
 	mocks "github.com/neuronlabs/neuron-mocks"
 )
 
 // TestHandleCreate test the handleCreate function.
 func TestHandleCreate(t *testing.T) {
-	c, err := neuron.NewController(cconfig.Default())
+	c, err := neuron.NewController(config.Default())
 	require.NoError(t, err)
 
-	err = c.RegisterRepository("mock", &cconfig.Repository{DriverName: mocks.DriverName})
+	err = c.RegisterRepository("mock", &config.Repository{DriverName: mocks.DriverName})
 	require.NoError(t, err)
 
 	err = c.RegisterModels(Human{}, House{}, Car{}, HookChecker{})
@@ -54,11 +54,11 @@ func TestHandleCreate(t *testing.T) {
 
 			assert.Equal(t, http.StatusConflict, resp.Code)
 
-			jerrs, err := jsonapi.UnmarshalErrors(resp.Body)
+			jsonapiErrors, err := jsonapi.UnmarshalErrors(resp.Body)
 			require.NoError(t, err)
 
-			if assert.Len(t, jerrs.Errors, 1) {
-				err := jerrs.Errors[0]
+			if assert.Len(t, jsonapiErrors.Errors, 1) {
+				err := jsonapiErrors.Errors[0]
 				if assert.NotEqual(t, "", err.Code) {
 					code, err := strconv.ParseInt(err.Code, 16, 32)
 					require.NoError(t, err)
@@ -82,11 +82,11 @@ func TestHandleCreate(t *testing.T) {
 
 			assert.Equal(t, http.StatusBadRequest, resp.Code)
 
-			jerrs, err := jsonapi.UnmarshalErrors(resp.Body)
+			jsonapiErrors, err := jsonapi.UnmarshalErrors(resp.Body)
 			require.NoError(t, err)
 
-			if assert.Len(t, jerrs.Errors, 1) {
-				err := jerrs.Errors[0]
+			if assert.Len(t, jsonapiErrors.Errors, 1) {
+				err := jsonapiErrors.Errors[0]
 				if assert.NotEqual(t, "", err.Code) {
 					code, err := strconv.ParseInt(err.Code, 16, 32)
 					require.NoError(t, err)
@@ -309,9 +309,9 @@ func TestHandleCreate(t *testing.T) {
 			require.NoError(t, err)
 
 			if assert.Len(t, errs.Errors, 1) {
-				jerr := errs.Errors[0]
+				jsonapiError := errs.Errors[0]
 
-				code, err := strconv.ParseInt(jerr.Code, 16, 32)
+				code, err := strconv.ParseInt(jsonapiError.Code, 16, 32)
 				require.NoError(t, err)
 
 				assert.Equal(t, class.QueryViolationUnique, errors.Class(code))

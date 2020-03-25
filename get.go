@@ -15,21 +15,7 @@ import (
 	"github.com/neuronlabs/jsonapi-handler/log"
 )
 
-type EndpointHandler struct {
-	handler  func(*mapping.ModelStruct, string) http.HandlerFunc
-	basePath string
-	model    *mapping.ModelStruct
-}
-
-func (e *EndpointHandler) BasePath(basePath string) *EndpointHandler {
-	e.basePath = basePath
-	return e
-}
-
-func (e *EndpointHandler) Handler() http.HandlerFunc {
-	return e.handler(e.model, e.basePath)
-}
-
+// GetWith returns JSONAPI GET EndpointHandler for given 'model'.
 func (h *Creator) GetWith(model interface{}) *EndpointHandler {
 	return &EndpointHandler{
 		model:   h.c.MustGetModelStruct(model),
@@ -37,6 +23,7 @@ func (h *Creator) GetWith(model interface{}) *EndpointHandler {
 	}
 }
 
+// Get returns JSONAPI Get http.HandlerFunc for given 'model'.
 func (h *Creator) Get(model interface{}) http.HandlerFunc {
 	mappedModel := h.c.MustGetModelStruct(model)
 	return h.handleGet(mappedModel, "")
@@ -77,8 +64,14 @@ func (h *Creator) handleGet(model *mapping.ModelStruct, basePath string) http.Ha
 			basePath = h.basePath()
 		}
 
+		linkType := jsonapi.ResourceLink
+		// but if the config doesn't allow that - set 'jsonapi.NoLink'
+		if !h.MarshalLinks {
+			linkType = jsonapi.NoLink
+		}
+
 		options := &jsonapi.MarshalOptions{Link: jsonapi.LinkOptions{
-			Type:       jsonapi.ResourceLink,
+			Type:       linkType,
 			BaseURL:    basePath,
 			RootID:     CtxMustGetID(ctx),
 			Collection: model.Collection(),

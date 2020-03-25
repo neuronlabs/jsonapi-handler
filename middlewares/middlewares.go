@@ -6,6 +6,7 @@ import (
 	"github.com/neuronlabs/jsonapi"
 )
 
+// Middleware is the function used as a http.Handler.
 type Middleware func(next http.Handler) http.Handler
 
 // compile time check for the Middleware.

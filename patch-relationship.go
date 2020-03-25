@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"reflect"
 
-	nerrors "github.com/neuronlabs/errors"
+	neuronErrors "github.com/neuronlabs/errors"
 	"github.com/neuronlabs/jsonapi"
 	"github.com/neuronlabs/neuron-core/class"
 	"github.com/neuronlabs/neuron-core/mapping"
@@ -14,16 +14,38 @@ import (
 	"github.com/neuronlabs/jsonapi-handler/log"
 )
 
+// PatchRelationship returns JSONAPI patch relationship http.HandlerFunc for given 'model' and it's 'field' relationship.
 func (h *Creator) PatchRelationship(model interface{}, field string) http.HandlerFunc {
 	mappedModel := h.c.MustGetModelStruct(model)
-	sField, ok := mappedModel.FieldByName(field)
+	sField, ok := mappedModel.RelationField(field)
 	if !ok {
 		log.Panicf("Model: '%s' doesn't have field: '%s'", mappedModel.String(), field)
 	}
-	return h.handlePatchRelationship(mappedModel, sField)
+	return h.handlePatchRelationship(mappedModel, sField, "")
 }
 
-func (h *Creator) handlePatchRelationship(model *mapping.ModelStruct, field *mapping.StructField) http.HandlerFunc {
+// PatchRelationshipHandlers returns mapping for the 'model' relation fields to related JSONAPI patch relationship http.HandlerFunc.
+func (h *Creator) PatchRelationshipHandlers(model interface{}, basePath ...string) map[*mapping.StructField]http.HandlerFunc {
+	mappedModel := h.c.MustGetModelStruct(model)
+	relationFields := mappedModel.RelationFields()
+	handlers := make(map[*mapping.StructField]http.HandlerFunc, len(relationFields))
+	if len(relationFields) == 0 {
+		return handlers
+	}
+
+	// get the base path
+	var bp string
+	if len(basePath) > 0 {
+		bp = basePath[0]
+	}
+	// set the http.HandlerFunc for each relation field.
+	for _, relation := range relationFields {
+		handlers[relation] = h.handlePatchRelationship(mappedModel, relation, bp)
+	}
+	return handlers
+}
+
+func (h *Creator) handlePatchRelationship(model *mapping.ModelStruct, field *mapping.StructField, basePath string) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		sID := CtxMustGetID(ctx)
@@ -42,9 +64,9 @@ func (h *Creator) handlePatchRelationship(model *mapping.ModelStruct, field *map
 			v := reflect.New(field.ReflectField().Type.Elem()).Interface()
 			selected, err := jsonapi.UnmarshalWithSelectedC(h.c, req.Body, v, h.jsonapiUnmarshalOptions())
 			if err != nil {
-				cl, ok := err.(nerrors.ClassError)
+				cl, ok := err.(neuronErrors.ClassError)
 				if !ok {
-					log.Errorf("Unmarshaling patch-relationship content failed: %v", err)
+					log.Errorf("Unmarshal patch-relationship content failed: %v", err)
 					h.marshalErrors(rw, req, 0, errors.MapError(err)...)
 					return
 				}
@@ -53,7 +75,7 @@ func (h *Creator) handlePatchRelationship(model *mapping.ModelStruct, field *map
 					nilData = true
 					v = nil
 				} else {
-					log.Errorf("Unmarshaling data failed: %v", err)
+					log.Errorf("Unmarshal data failed: %v", err)
 					h.marshalErrors(rw, req, 0, errors.MapError(err)...)
 					return
 				}
@@ -85,11 +107,11 @@ func (h *Creator) handlePatchRelationship(model *mapping.ModelStruct, field *map
 			log.Debugf("Value: %T", value)
 			err = jsonapi.UnmarshalC(h.c, req.Body, value)
 			if err != nil {
-				ec, ok := err.(nerrors.ClassError)
+				ec, ok := err.(neuronErrors.ClassError)
 				if ok && ec.Class() == class.EncodingUnmarshalNoData {
 					nilData = true
 				} else {
-					log.Debugf("Unmarshaling patch-relationship content failed: %v", err)
+					log.Debugf("Unmarshal patch-relationship content failed: %v", err)
 					h.marshalErrors(rw, req, 0, errors.MapError(err)...)
 					return
 				}
@@ -150,9 +172,15 @@ func (h *Creator) handlePatchRelationship(model *mapping.ModelStruct, field *map
 			return
 		}
 
+		linkType := jsonapi.RelationshipLink
+		// but if the config doesn't allow that - set 'jsonapi.NoLink'
+		if !h.MarshalLinks {
+			linkType = jsonapi.NoLink
+		}
+
 		marshalOptions := &jsonapi.MarshalOptions{Link: jsonapi.LinkOptions{
-			Type:         jsonapi.RelationshipLink,
-			BaseURL:      h.basePath(),
+			Type:         linkType,
+			BaseURL:      h.getBasePath(basePath),
 			RootID:       sID,
 			Collection:   model.Collection(),
 			RelatedField: field.NeuronName(),
@@ -175,7 +203,7 @@ func (h *Creator) handlePatchRelationship(model *mapping.ModelStruct, field *map
 		}
 
 		if err = resultScope.SetFieldset(field.NeuronName()); err != nil {
-			log.Errorf("[PATCH-RELATIONSHIP][SCOPE] Setting 'id' field to the fieldset of returing 'get' scope fails: %v", err)
+			log.Errorf("[PATCH-RELATIONSHIP][SCOPE] Setting 'id' field to the fieldset of returning 'get' scope fails: %v", err)
 			h.marshalErrors(rw, req, 0, errors.ErrInternalError())
 			return
 		}

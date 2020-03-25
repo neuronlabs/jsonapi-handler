@@ -195,7 +195,7 @@ func TestHandleGet(t *testing.T) {
 				input := buf.String()
 				assert.True(t, strings.Contains(input, "include"), input)
 
-				// Unmarshaling includes should be fixed in neuron-core#22
+				// Unmarshal includes should be fixed in neuron-core#22
 				t.Skipf("Waiting for NeuronCore#22")
 
 				humanValues, err := s.IncludedModelValues(&Human{})

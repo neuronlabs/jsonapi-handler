@@ -15,17 +15,17 @@ import (
 	"github.com/neuronlabs/errors"
 	"github.com/neuronlabs/jsonapi"
 	"github.com/neuronlabs/neuron-core/class"
-	cconfig "github.com/neuronlabs/neuron-core/config"
+	"github.com/neuronlabs/neuron-core/config"
 	"github.com/neuronlabs/neuron-core/query"
 	mocks "github.com/neuronlabs/neuron-mocks"
 )
 
 // TestHandleDelete tests handleDelete function.
 func TestHandleDelete(t *testing.T) {
-	c, err := neuron.NewController(cconfig.Default())
+	c, err := neuron.NewController(config.Default())
 	require.NoError(t, err)
 
-	err = c.RegisterRepository("mock", &cconfig.Repository{DriverName: mocks.DriverName})
+	err = c.RegisterRepository("mock", &config.Repository{DriverName: mocks.DriverName})
 	require.NoError(t, err)
 
 	err = c.RegisterModels(Human{}, House{}, Car{}, HookChecker{})
@@ -51,9 +51,9 @@ func TestHandleDelete(t *testing.T) {
 			s, ok := args[1].(*query.Scope)
 			require.True(t, ok)
 
-			pfilters := s.PrimaryFilters
-			if assert.Len(t, pfilters, 1) {
-				filter := pfilters[0]
+			primaryFilters := s.PrimaryFilters
+			if assert.Len(t, primaryFilters, 1) {
+				filter := primaryFilters[0]
 				if assert.Len(t, filter.Values, 1) {
 					v := filter.Values[0]
 					assert.Equal(t, query.OpIn, v.Operator)
@@ -90,9 +90,9 @@ func TestHandleDelete(t *testing.T) {
 			s, ok := args[1].(*query.Scope)
 			require.True(t, ok)
 
-			pfilters := s.PrimaryFilters
-			if assert.Len(t, pfilters, 1) {
-				filter := pfilters[0]
+			primaryFilters := s.PrimaryFilters
+			if assert.Len(t, primaryFilters, 1) {
+				filter := primaryFilters[0]
 				if assert.Len(t, filter.Values, 1) {
 					v := filter.Values[0]
 					assert.Equal(t, query.OpIn, v.Operator)
@@ -113,8 +113,8 @@ func TestHandleDelete(t *testing.T) {
 		require.NoError(t, err)
 
 		if assert.Len(t, payload.Errors, 1) {
-			jerr := payload.Errors[0]
-			code, err := strconv.ParseInt(jerr.Code, 16, 32)
+			jsonapiError := payload.Errors[0]
+			code, err := strconv.ParseInt(jsonapiError.Code, 16, 32)
 			require.NoError(t, err)
 
 			assert.Equal(t, class.QueryValueNoResult, errors.Class(code))
@@ -135,17 +135,17 @@ func TestHandleDelete(t *testing.T) {
 		repo, err := c.GetRepository(HookChecker{})
 		require.NoError(t, err)
 
-		hooksChcekerRepo, ok := repo.(*mocks.Repository)
+		hooksCheckerRepo, ok := repo.(*mocks.Repository)
 		require.True(t, ok)
 
-		hooksChcekerRepo.On("Begin", mock.Anything, mock.Anything).Once().Return(nil)
-		hooksChcekerRepo.On("Delete", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+		hooksCheckerRepo.On("Begin", mock.Anything, mock.Anything).Once().Return(nil)
+		hooksCheckerRepo.On("Delete", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
 			s, ok := args[1].(*query.Scope)
 			require.True(t, ok)
 
-			pfilters := s.PrimaryFilters
-			if assert.Len(t, pfilters, 1) {
-				filter := pfilters[0]
+			primaryFilters := s.PrimaryFilters
+			if assert.Len(t, primaryFilters, 1) {
+				filter := primaryFilters[0]
 				if assert.Len(t, filter.Values, 1) {
 					v := filter.Values[0]
 					assert.Equal(t, query.OpIn, v.Operator)
@@ -159,7 +159,7 @@ func TestHandleDelete(t *testing.T) {
 			assert.True(t, ok)
 
 		}).Return(nil)
-		hooksChcekerRepo.On("Commit", mock.Anything, mock.Anything).Once().Return(nil)
+		hooksCheckerRepo.On("Commit", mock.Anything, mock.Anything).Once().Return(nil)
 
 		resp := httptest.NewRecorder()
 		h.Delete(HookChecker{}).ServeHTTP(resp, req)

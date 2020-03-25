@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/neuronlabs/jsonapi-handler/log"
 	"github.com/neuronlabs/neuron-core/query"
+
+	"github.com/neuronlabs/jsonapi-handler/log"
 )
 
 // House is the model used by the jsonapi handler tests.

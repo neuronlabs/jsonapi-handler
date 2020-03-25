@@ -49,7 +49,7 @@ func ErrInvalidAuthenticationInfo() *jsonapi.Error {
 	}
 }
 
-// ErrInvalidHeaderValue responsed when some HTTP header was not in a valid format.
+// ErrInvalidHeaderValue responded when some HTTP header was not in a valid format.
 func ErrInvalidHeaderValue() *jsonapi.Error {
 	return &jsonapi.Error{
 		Title:  "The value provided in one of the HTTP headers was not in the correct format.",
@@ -105,10 +105,10 @@ func ErrInvalidURI() *jsonapi.Error {
 	}
 }
 
-// ErrInvalidJSONDocument error returned when the specified JSON structure is not syntetically valid.
+// ErrInvalidJSONDocument error returned when the specified JSON structure is not syntactically valid.
 func ErrInvalidJSONDocument() *jsonapi.Error {
 	return &jsonapi.Error{
-		Title:  "The specified JSON is not syntetically valid.",
+		Title:  "The specified JSON is not syntactically valid.",
 		Status: "400",
 	}
 }

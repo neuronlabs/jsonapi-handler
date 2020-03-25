@@ -26,6 +26,7 @@ import (
 )
 
 // TestHandleList tests the handleList function.
+//noinspection SpellCheckingInspection
 func TestHandleList(t *testing.T) {
 	c, err := neuron.NewController(config.Default())
 	require.NoError(t, err)

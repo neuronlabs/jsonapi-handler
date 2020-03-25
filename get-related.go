@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	nerrors "github.com/neuronlabs/errors"
+	neuronErrors "github.com/neuronlabs/errors"
 	"github.com/neuronlabs/jsonapi"
 	"github.com/neuronlabs/neuron-core/class"
 	"github.com/neuronlabs/neuron-core/mapping"
@@ -16,16 +16,35 @@ import (
 	"github.com/neuronlabs/jsonapi-handler/log"
 )
 
-func (h *Creator) GetRelated(model interface{}, field string) http.HandlerFunc {
+// GetRelated returns handler function for the
+func (h *Creator) GetRelated(model interface{}, field string, basePath ...string) http.HandlerFunc {
 	mappedModel := h.c.MustGetModelStruct(model)
-	sField, ok := mappedModel.FieldByName(field)
+	sField, ok := mappedModel.RelationField(field)
 	if !ok {
 		log.Panicf("Field: '%s' not found for the model: '%s'", mappedModel.String())
 	}
-	return h.handleGetRelated(mappedModel, sField)
+	var bp string
+	if len(basePath) != 0 {
+		bp = basePath[0]
+	}
+	return h.handleGetRelated(mappedModel, sField, bp)
 }
 
-func (h *Creator) handleGetRelated(model *mapping.ModelStruct, field *mapping.StructField) http.HandlerFunc {
+// GetRelatedHandlers returns all handler functions for the JSONAPI 'GET RELATED' relationship fields for given model.
+func (h *Creator) GetRelatedHandlers(model interface{}, basePath ...string) map[*mapping.StructField]http.HandlerFunc {
+	mappedModel := h.c.MustGetModelStruct(model)
+	handlers := make(map[*mapping.StructField]http.HandlerFunc)
+	var bp string
+	if len(basePath) != 0 {
+		bp = basePath[0]
+	}
+	for _, relation := range mappedModel.RelationFields() {
+		handlers[relation] = h.handleGetRelated(mappedModel, relation, bp)
+	}
+	return handlers
+}
+
+func (h *Creator) handleGetRelated(model *mapping.ModelStruct, field *mapping.StructField, basePath string) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		// Check the URL 'id' value.
@@ -78,10 +97,16 @@ func (h *Creator) handleGetRelated(model *mapping.ModelStruct, field *mapping.St
 			return
 		}
 
+		linkType := jsonapi.RelatedLink
+		// but if the config doesn't allow that - set 'jsonapi.NoLink'
+		if !h.MarshalLinks {
+			linkType = jsonapi.NoLink
+		}
+
 		options := &jsonapi.MarshalOptions{
 			Link: jsonapi.LinkOptions{
-				Type:         jsonapi.RelatedLink,
-				BaseURL:      h.basePath(),
+				Type:         linkType,
+				BaseURL:      h.getBasePath(basePath),
 				RootID:       id,
 				Collection:   model.Collection(),
 				RelatedField: field.NeuronName(),
@@ -133,7 +158,7 @@ func (h *Creator) handleGetRelatedSingle(ctx context.Context, rw http.ResponseWr
 	}
 
 	if err := relatedScope.GetContext(ctx); err != nil {
-		ce, ok := err.(nerrors.ClassError)
+		ce, ok := err.(neuronErrors.ClassError)
 		if ok {
 			if ce.Class() == class.QueryValueNoResult {
 				relatedScope.Value = nil
@@ -192,7 +217,7 @@ func (h *Creator) handleGetRelatedMany(ctx context.Context, rw http.ResponseWrit
 	}
 
 	if err := relatedScope.ListContext(ctx); err != nil {
-		ce, ok := err.(nerrors.ClassError)
+		ce, ok := err.(neuronErrors.ClassError)
 		if ok {
 			if ce.Class() == class.QueryValueNoResult {
 				h.marshalScope(relatedScope, rw, req, http.StatusOK, options)

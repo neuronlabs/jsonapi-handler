@@ -10,13 +10,21 @@ import (
 	"github.com/neuronlabs/jsonapi-handler/log"
 )
 
+// DeleteWith creates JSONAPI Delete EndpointHandler for given 'model'.
+func (h *Creator) DeleteWith(model interface{}) *EndpointHandler {
+	return &EndpointHandler{
+		model:   h.c.MustGetModelStruct(model),
+		handler: h.handleDelete,
+	}
+}
+
 // Delete is the JSONAPI DELETE http handler for provided 'model'.
 func (h *Creator) Delete(model interface{}) http.HandlerFunc {
 	mappedModel := h.c.MustGetModelStruct(model)
-	return h.handleDelete(mappedModel)
+	return h.handleDelete(mappedModel, "")
 }
 
-func (h *Creator) handleDelete(model *mapping.ModelStruct) http.HandlerFunc {
+func (h *Creator) handleDelete(model *mapping.ModelStruct, basePath string) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		id := CtxMustGetID(ctx)

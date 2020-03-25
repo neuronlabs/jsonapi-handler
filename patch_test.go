@@ -16,17 +16,17 @@ import (
 	"github.com/neuronlabs/errors"
 	"github.com/neuronlabs/jsonapi"
 	"github.com/neuronlabs/neuron-core/class"
-	cconfig "github.com/neuronlabs/neuron-core/config"
+	"github.com/neuronlabs/neuron-core/config"
 	"github.com/neuronlabs/neuron-core/query"
 	mocks "github.com/neuronlabs/neuron-mocks"
 )
 
 // TestHandlePatch tests handlePatch function.
 func TestHandlePatch(t *testing.T) {
-	c, err := neuron.NewController(cconfig.Default())
+	c, err := neuron.NewController(config.Default())
 	require.NoError(t, err)
 
-	err = c.RegisterRepository("mock", &cconfig.Repository{DriverName: mocks.DriverName})
+	err = c.RegisterRepository("mock", &config.Repository{DriverName: mocks.DriverName})
 	require.NoError(t, err)
 
 	err = c.RegisterModels(Human{}, House{}, Car{}, HookChecker{})
@@ -153,12 +153,12 @@ func TestHandlePatch(t *testing.T) {
 
 	t.Run("Error", func(t *testing.T) {
 		t.Run("InvalidID", func(t *testing.T) {
-			type idcase struct {
+			type idCase struct {
 				name string
 				url  string
 			}
 
-			cases := []idcase{{"Empty", " "}, {"InvalidType", "ff1231-ef1213"}}
+			cases := []idCase{{"Empty", " "}, {"InvalidType", "ff1231-ef1213"}}
 
 			for _, cs := range cases {
 				t.Run(cs.name, func(t *testing.T) {

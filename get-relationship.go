@@ -12,16 +12,33 @@ import (
 	"github.com/neuronlabs/jsonapi-handler/log"
 )
 
+// GetRelationship returns http.HandlerFunc for the JSONAPI get Relationship endpoint for the 'model'
+// and relationship 'field'.
 func (h *Creator) GetRelationship(model interface{}, field string) http.HandlerFunc {
 	mappedModel := h.c.MustGetModelStruct(model)
-	sField, ok := mappedModel.FieldByName(field)
+	sField, ok := mappedModel.RelationField(field)
 	if !ok {
 		log.Panicf("Field: '%s' not found for the model: '%s'", mappedModel.String())
 	}
-	return h.handleGetRelationship(mappedModel, sField)
+	return h.handleGetRelationship(mappedModel, sField, "")
 }
 
-func (h *Creator) handleGetRelationship(model *mapping.ModelStruct, field *mapping.StructField) http.HandlerFunc {
+// GetRelationShipHandlers returns mapping of 'model' relationship fields to related http.HandlerFunc
+// for the JSONAPI get relationship endpoints.
+func (h *Creator) GetRelationShipHandlers(model interface{}, basePath ...string) map[*mapping.StructField]http.HandlerFunc {
+	mappedModel := h.c.MustGetModelStruct(model)
+	handlers := make(map[*mapping.StructField]http.HandlerFunc)
+	var bp string
+	if len(basePath) > 0 {
+		bp = basePath[0]
+	}
+	for _, relation := range mappedModel.RelationFields() {
+		handlers[relation] = h.handleGetRelationship(mappedModel, relation, bp)
+	}
+	return handlers
+}
+
+func (h *Creator) handleGetRelationship(model *mapping.ModelStruct, field *mapping.StructField, basePath string) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		// Check the URL 'id' value.
@@ -99,9 +116,15 @@ func (h *Creator) handleGetRelationship(model *mapping.ModelStruct, field *mappi
 			return
 		}
 
+		linkType := jsonapi.RelationshipLink
+		// but if the config doesn't allow that - set 'jsonapi.NoLink'
+		if !h.MarshalLinks {
+			linkType = jsonapi.NoLink
+		}
+
 		options := &jsonapi.MarshalOptions{Link: jsonapi.LinkOptions{
-			Type:         jsonapi.RelationshipLink,
-			BaseURL:      h.basePath(),
+			Type:         linkType,
+			BaseURL:      h.getBasePath(basePath),
 			RootID:       id,
 			Collection:   model.Collection(),
 			RelatedField: field.NeuronName(),

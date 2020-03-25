@@ -143,7 +143,7 @@ func (c *ClassMapper) mapSingleError(e errors.ClassError) *jsonapi.Error {
 			// at last check it's major
 			creator, ok = c.Majors[e.Class().Major()]
 			if !ok {
-				log.Errorf("Unmapped error proivded: %v, with Class: %v", e, e.Class())
+				log.Errorf("Unmapped error provided: %v, with Class: %v", e, e.Class())
 				return ErrInternalError()
 			}
 		}

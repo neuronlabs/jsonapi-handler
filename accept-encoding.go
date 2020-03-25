@@ -57,7 +57,7 @@ func parseQVHeader(header http.Header, headerName string) []QualityValue {
 		s = skipSpace(s[1:])
 	}
 	sort.Sort(sorter)
-	return ([]QualityValue)(sorter)
+	return sorter
 }
 
 func expectQuality(s string) (q float64, rest string) {

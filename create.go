@@ -10,13 +10,21 @@ import (
 	"github.com/neuronlabs/jsonapi-handler/log"
 )
 
+// CreateWith returns JSONAPI create method endpoint handler.
+func (h *Creator) CreateWith(model interface{}) *EndpointHandler {
+	return &EndpointHandler{
+		handler: h.handleCreate,
+		model:   h.c.MustGetModelStruct(model),
+	}
+}
+
 // Create returns JSONAPI create method handler function for the provided 'model'.
 func (h *Creator) Create(model interface{}) http.HandlerFunc {
 	mappedModel := h.c.MustGetModelStruct(model)
-	return h.handleCreate(mappedModel)
+	return h.handleCreate(mappedModel, "")
 }
 
-func (h *Creator) handleCreate(model *mapping.ModelStruct) http.HandlerFunc {
+func (h *Creator) handleCreate(model *mapping.ModelStruct, basePath string) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		// unmarshal the input from the request body.
 		s, err := jsonapi.UnmarshalSingleScopeC(h.c, req.Body, model, h.jsonapiUnmarshalOptions())
@@ -89,11 +97,18 @@ func (h *Creator) handleCreate(model *mapping.ModelStruct) http.HandlerFunc {
 		options := &jsonapi.MarshalOptions{
 			Link: jsonapi.LinkOptions{
 				Type:       linkType,
-				BaseURL:    h.basePath(),
+				BaseURL:    h.getBasePath(basePath),
 				Collection: s.Struct().Collection(),
 				RootID:     strValues[0],
 			},
 		}
 		h.marshalScope(s, rw, req, http.StatusCreated, options)
 	}
+}
+
+func (h *Creator) getBasePath(basePath string) string {
+	if basePath == "" {
+		basePath = h.basePath()
+	}
+	return basePath
 }
