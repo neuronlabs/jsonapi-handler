@@ -2,6 +2,7 @@ package middlewares
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/neuronlabs/jsonapi"
 )
@@ -10,27 +11,30 @@ import (
 type Middleware func(next http.Handler) http.Handler
 
 // compile time check for the Middleware.
-var _ Middleware = AcceptMediaTypeMid
+var _ Middleware = AcceptMediaType
 
-// AcceptMediaTypeMid is the middleware that checks if the request contains
-// Header "Accept: application/vnd.api+json".
-func AcceptMediaTypeMid(next http.Handler) http.Handler {
+// AcceptMediaType is the middleware that checks if the request contains
+// Header "Accept" with the value of: application/vnd.api+json".
+func AcceptMediaType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		mediaType := req.Header.Get("Accept")
-		if mediaType != jsonapi.MediaType {
-			rw.WriteHeader(http.StatusNotAcceptable)
-			return
+		mediaTypeHeader := req.Header.Get("Accept")
+		mediaTypes := strings.Split(mediaTypeHeader, ",")
+		for _, mediaType := range mediaTypes {
+			if strings.TrimSpace(mediaType) == jsonapi.MediaType {
+				next.ServeHTTP(rw, req)
+				return
+			}
 		}
-		next.ServeHTTP(rw, req)
+		rw.WriteHeader(http.StatusNotAcceptable)
 	})
 }
 
 // compile time check for the Middleware.
-var _ Middleware = UnsupportedMediaTypeMid
+var _ Middleware = UnsupportedMediaType
 
-// UnsupportedMediaTypeMid is the middleware that checks if the request contains Header "Content-Type" with
+// UnsupportedMediaType is the middleware that checks if the request contains Header "Content-Type" with
 // media type different then `application/vnd.api+json`
-func UnsupportedMediaTypeMid(next http.Handler) http.Handler {
+func UnsupportedMediaType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		mediaType := req.Header.Get("Content-Type")
 		if mediaType != jsonapi.MediaType {
