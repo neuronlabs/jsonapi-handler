@@ -11,11 +11,11 @@ import (
 type Middleware func(next http.Handler) http.Handler
 
 // compile time check for the Middleware.
-var _ Middleware = AcceptMediaType
+var _ Middleware = AcceptJSONAPIMediaType
 
-// AcceptMediaType is the middleware that checks if the request contains
+// AcceptJSONAPIMediaType is the middleware that checks if the request contains
 // Header "Accept" with the value of: application/vnd.api+json".
-func AcceptMediaType(next http.Handler) http.Handler {
+func AcceptJSONAPIMediaType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		mediaTypeHeader := req.Header.Get("Accept")
 		mediaTypes := strings.Split(mediaTypeHeader, ",")
@@ -30,11 +30,11 @@ func AcceptMediaType(next http.Handler) http.Handler {
 }
 
 // compile time check for the Middleware.
-var _ Middleware = UnsupportedMediaType
+var _ Middleware = CheckJSONAPIContentType
 
-// UnsupportedMediaType is the middleware that checks if the request contains Header "Content-Type" with
+// CheckJSONAPIContentType is the middleware that checks if the request contains Header "Content-Type" with
 // media type different then `application/vnd.api+json`
-func UnsupportedMediaType(next http.Handler) http.Handler {
+func CheckJSONAPIContentType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		mediaType := req.Header.Get("Content-Type")
 		if mediaType != jsonapi.MediaType {
